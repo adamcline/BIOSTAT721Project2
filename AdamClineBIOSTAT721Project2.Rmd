@@ -1,0 +1,231 @@
+---
+title: "BIOSTAT 721 Project 2"
+author: "Adam Cline"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Load in libraries
+library(tidyverse)
+library(gt)
+```
+
+```{r}
+#Load in data
+pollution2018 <- read.csv("data-7/data/AQ_2018.csv")
+pollution2019 <- read.csv("data-7/data/AQ_2019.csv")
+pollution2020 <- read.csv("data-7/data/AQ_2020.csv")
+```
+
+```{r}
+#descriptive statsitics/Notes for function creation
+
+#two rows of data can correspond to the same day (maybe average the measurements?)
+#investigate date variable
+#look for duplicates
+#look for negative measurments and convert them to zero
+
+class(pollution2018$Date)
+distinct2018 = distinct(pollution2018)
+```
+
+
+```{r}
+# Cleans air quality data by keeping date and pollutant concentration variables,
+# converting dates, removing duplicate observations, replacing negative
+# measurements with zero, and averaging multiple measurements taken on the same day.
+#
+# Arguments:
+#   file: Path to the CSV file containing air quality data.
+#   ozone_units: Desired units for ozone concentration ("ppm" or "ppb").
+#                Defaults to "ppm".
+#
+# Returns:
+#   A cleaned data frame with one row per date and columns for CO, PM2.5,
+#   and O3 concentrations. O3 is returned in the units specified by ozone_units.
+
+clean_pollution = function(file, ozone_units = "ppm"){
+  # Read in data
+  AQ = read.csv(file)
+
+  # Keep only date and pollutant concentrations
+  AQ = AQ[, c(1, 2, 4, 6)]
+
+  # Rename columns with consistent internal names
+  names(AQ) = c("date", "co", "pm25", "o3")
+
+  # Convert date variable to an actual R Date object
+  AQ$date = as.Date(AQ$date, format = "%m/%d/%Y")
+
+  # Remove duplicate rows
+  AQ = distinct(AQ)
+
+  # Loop through pollutant measurement columns and replace negative values with 0
+  pollutants = c("co", "pm25", "o3")
+  for (i in pollutants) {
+    AQ[[i]][AQ[[i]] < 0] = 0
+  }
+
+  # Average days where multiple measurements are taken
+  AQ = AQ |>
+    group_by(date) |>
+    summarize(
+      co = mean(co, na.rm = TRUE),
+      pm25 = mean(pm25, na.rm = TRUE),
+      o3 = mean(o3, na.rm = TRUE)
+    )
+
+  # Convert O3 units from ppm to ppb if requested
+  if (ozone_units == "ppb") {
+    AQ$o3 = AQ$o3 * 1000
+  }
+
+  # Rename columns to their final descriptive names
+  if (ozone_units == "ppm") {
+    names(AQ) = c("date", "co_8hr_max_ppm", "pm25_daily_mean_ugm3", "o3_8hr_max_ppm")
+  } else {
+    names(AQ) = c("date", "co_8hr_max_ppm", "pm25_daily_mean_ugm3", "o3_8hr_max_ppb")
+  }
+
+  return(AQ)
+}
+```
+
+```{r}
+AQ2018 = clean_pollution("data-7/data/AQ_2018.csv")
+AQ2018_ppb = clean_pollution("data-7/data/AQ_2018.csv", ozone_units = "ppb")
+AQ2019 = clean_pollution("data-7/data/AQ_2019.csv")
+AQ2019_ppb = clean_pollution("data-7/data/AQ_2019.csv", ozone_units = "ppb")
+AQ2020 = clean_pollution("data-7/data/AQ_2020.csv")
+AQ2020_ppb = clean_pollution("data-7/data/AQ_2020.csv", ozone_units = "ppb")
+
+# Check for duplicate dates
+anyDuplicated(AQ2020$date)
+
+# Check for negative pollutant measurements
+any(AQ2020[, -1] < 0, na.rm = TRUE)
+
+#combine datasets
+AQ_all = bind_rows(AQ2018, AQ2019, AQ2020)
+```
+
+# Tables
+```{r}
+table2018 = bind_rows(
+  AQ2018 |> 
+    summarize(
+      Statistic = "Minimum",
+      co_8hr_max_ppm = min(co_8hr_max_ppm, na.rm = TRUE),
+      pm25_daily_mean_ugm3 = min(pm25_daily_mean_ugm3, na.rm = TRUE),
+      o3_8hr_max_ppm = min(o3_8hr_max_ppm, na.rm = TRUE)
+    ),
+
+  AQ2018 |> 
+    summarize(
+      Statistic = "Maximum",
+      co_8hr_max_ppm = max(co_8hr_max_ppm, na.rm = TRUE),
+      pm25_daily_mean_ugm3 = max(pm25_daily_mean_ugm3, na.rm = TRUE),
+      o3_8hr_max_ppm = max(o3_8hr_max_ppm, na.rm = TRUE)
+    )
+)
+
+table2018 = table2018 |>
+  gt() |>
+  cols_label(
+    Statistic = "Statistic",
+    co_8hr_max_ppm = "CO (ppm)",
+    pm25_daily_mean_ugm3 = "PM2.5 (µg/m³)",
+    o3_8hr_max_ppm = "O3 (ppm)"
+  ) |>
+  fmt_number(
+    columns = -Statistic,
+    decimals = 3
+  ) |>
+  tab_header(
+    title = "Daily Air Pollutant Concentrations: 2018"
+  )
+
+table2018
+```
+
+```{r}
+table2019 = bind_rows(
+  AQ2019 |> 
+    summarize(
+      Statistic = "Minimum",
+      co_8hr_max_ppm = min(co_8hr_max_ppm, na.rm = TRUE),
+      pm25_daily_mean_ugm3 = min(pm25_daily_mean_ugm3, na.rm = TRUE),
+      o3_8hr_max_ppm = min(o3_8hr_max_ppm, na.rm = TRUE)
+    ),
+
+  AQ2019 |> 
+    summarize(
+      Statistic = "Maximum",
+      co_8hr_max_ppm = max(co_8hr_max_ppm, na.rm = TRUE),
+      pm25_daily_mean_ugm3 = max(pm25_daily_mean_ugm3, na.rm = TRUE),
+      o3_8hr_max_ppm = max(o3_8hr_max_ppm, na.rm = TRUE)
+    )
+)
+
+table2019 = table2019 |>
+  gt() |>
+  cols_label(
+    Statistic = "Statistic",
+    co_8hr_max_ppm = "CO (ppm)",
+    pm25_daily_mean_ugm3 = "PM2.5 (µg/m³)",
+    o3_8hr_max_ppm = "O3 (ppm)"
+  ) |>
+  fmt_number(
+    columns = -Statistic,
+    decimals = 3
+  ) |>
+  tab_header(
+    title = "Daily Air Pollutant Concentrations: 2018"
+  )
+
+table2019
+```
+
+```{r}
+table2020 = bind_rows(
+  AQ2020 |> 
+    summarize(
+      Statistic = "Minimum",
+      co_8hr_max_ppm = min(co_8hr_max_ppm, na.rm = TRUE),
+      pm25_daily_mean_ugm3 = min(pm25_daily_mean_ugm3, na.rm = TRUE),
+      o3_8hr_max_ppm = min(o3_8hr_max_ppm, na.rm = TRUE)
+    ),
+
+  AQ2020 |> 
+    summarize(
+      Statistic = "Maximum",
+      co_8hr_max_ppm = max(co_8hr_max_ppm, na.rm = TRUE),
+      pm25_daily_mean_ugm3 = max(pm25_daily_mean_ugm3, na.rm = TRUE),
+      o3_8hr_max_ppm = max(o3_8hr_max_ppm, na.rm = TRUE)
+    )
+)
+
+table2020 = table2020 |>
+  gt() |>
+  cols_label(
+    Statistic = "Statistic",
+    co_8hr_max_ppm = "CO (ppm)",
+    pm25_daily_mean_ugm3 = "PM2.5 (µg/m³)",
+    o3_8hr_max_ppm = "O3 (ppm)"
+  ) |>
+  fmt_number(
+    columns = -Statistic,
+    decimals = 3
+  ) |>
+  tab_header(
+    title = "Daily Air Pollutant Concentrations: 2018"
+  )
+
+table2020
+```
+
